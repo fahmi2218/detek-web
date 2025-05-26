@@ -1,0 +1,232 @@
+"use client";
+import React from "react";
+
+function MainComponent() {
+  const [devices, setDevices] = useState([]);
+  const [selectedDevice, setSelectedDevice] = useState(null);
+  const [radarAngle, setRadarAngle] = useState(0);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState("all"); // 'all', 'name', 'brand'
+
+  // Fungsi untuk memindai perangkat
+  const scanDevices = async () => {
+    try {
+      setScanning(true);
+      setError(null);
+      const response = await fetch("/api/scanNearbyDevices", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Gagal memindai perangkat");
+      }
+
+      const data = await response.json();
+      setDevices(data.devices);
+    } catch (err) {
+      setError("Terjadi kesalahan saat memindai perangkat");
+      console.error(err);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // Memulai pemindaian otomatis
+  useEffect(() => {
+    scanDevices();
+    const interval = setInterval(scanDevices, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Animate radar sweep
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRadarAngle((angle) => (angle + 2) % 360);
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Filter devices based on search query and filter type
+  const filteredDevices = devices.filter((device) => {
+    const query = searchQuery.toLowerCase();
+    if (!query) return true;
+
+    switch (filterType) {
+      case "name":
+        return device.name.toLowerCase().includes(query);
+      case "brand":
+        return device.brand.toLowerCase().includes(query);
+      default:
+        return (
+          device.name.toLowerCase().includes(query) ||
+          device.brand.toLowerCase().includes(query) ||
+          device.model.toLowerCase().includes(query)
+        );
+    }
+  });
+
+  return (
+    <div className="min-h-screen bg-[#001220] text-white p-4">
+      <h1 className="text-2xl font-bold mb-6 text-center">
+        Pemindai Perangkat
+      </h1>
+
+      {/* Search and Filter Controls */}
+      <div className="max-w-md mx-auto mb-6">
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="Cari perangkat..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1 px-4 py-2 rounded-lg bg-[#002240] text-white border border-[#0f4] focus:outline-none focus:border-[#0f6]"
+          />
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="px-4 py-2 rounded-lg bg-[#002240] text-white border border-[#0f4] focus:outline-none focus:border-[#0f6]"
+          >
+            <option value="all">Semua</option>
+            <option value="name">Nama</option>
+            <option value="brand">Merek</option>
+          </select>
+        </div>
+
+        <button
+          onClick={scanDevices}
+          disabled={scanning}
+          className={`w-full bg-[#0f4] text-black px-4 py-2 rounded-lg ${
+            scanning ? "opacity-50" : "hover:bg-[#0f6]"
+          }`}
+        >
+          {scanning ? "Memindai..." : "Pindai Ulang"}
+        </button>
+
+        {error && <p className="mt-2 text-red-500 text-center">{error}</p>}
+      </div>
+
+      <p className="text-center mb-4 text-gray-400">
+        Mencari perangkat dalam jangkauan 0-8 meter
+      </p>
+
+      {/* Radar Display */}
+      <div className="relative w-[300px] h-[300px] mx-auto mb-8">
+        {/* Radar Background Circles with Labels */}
+        <div className="absolute inset-0 border-2 border-[#0f4] rounded-full opacity-20">
+          <span className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-sm">
+            8m
+          </span>
+        </div>
+        <div className="absolute inset-[25%] border-2 border-[#0f4] rounded-full opacity-20">
+          <span className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-sm">
+            6m
+          </span>
+        </div>
+        <div className="absolute inset-[50%] border-2 border-[#0f4] rounded-full opacity-20">
+          <span className="absolute -top-4 left-1/2 transform -translate-x-1/2 text-sm">
+            4m
+          </span>
+        </div>
+        <div className="absolute inset-[75%] border-2 border-[#0f4] rounded-full opacity-20">
+          <span className="absolute -top-3 left-1/2 transform -translate-x-1/2 text-sm">
+            2m
+          </span>
+        </div>
+
+        {/* Radar Sweep Line */}
+        <div
+          className="absolute w-[50%] h-[2px] bg-[#0f4] origin-left"
+          style={{
+            left: "50%",
+            top: "50%",
+            transform: `rotate(${radarAngle}deg)`,
+            boxShadow: "0 0 10px #0f4",
+          }}
+        ></div>
+
+        {/* Device Dots */}
+        {filteredDevices.map((device) => (
+          <div
+            key={device.id}
+            className="absolute cursor-pointer"
+            style={{
+              left: `${50 + device.position.x}%`,
+              top: `${50 + device.position.y}%`,
+              transform: "translate(-50%, -50%)",
+            }}
+            onClick={() => setSelectedDevice(device)}
+          >
+            <div
+              className="w-3 h-3 bg-[#0f4] rounded-full"
+              style={{
+                boxShadow: "0 0 10px #0f4",
+                animation: "pulse 1.5s infinite",
+              }}
+            ></div>
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 text-xs whitespace-nowrap">
+              {device.name}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Selected Device Info */}
+      {selectedDevice && (
+        <div className="max-w-md mx-auto bg-[#002240] p-4 rounded-lg mb-8">
+          <h2 className="text-xl font-bold mb-2">{selectedDevice.name}</h2>
+          <p>Merek: {selectedDevice.brand}</p>
+          <p>Model: {selectedDevice.model}</p>
+          <p>Jarak: {selectedDevice.distance} meter</p>
+          <p>Kekuatan Sinyal: {selectedDevice.signalStrength}%</p>
+        </div>
+      )}
+
+      {/* Device List */}
+      <div className="max-w-md mx-auto">
+        <h2 className="text-xl font-bold mb-4">Perangkat Terdeteksi</h2>
+        {filteredDevices.length === 0 ? (
+          <div className="bg-[#002240] rounded-lg p-4 text-center text-gray-400">
+            {searchQuery
+              ? "Tidak ada perangkat yang sesuai dengan pencarian"
+              : "Tidak ada perangkat yang terdeteksi dalam jangkauan"}
+          </div>
+        ) : (
+          <div className="bg-[#002240] rounded-lg">
+            {filteredDevices
+              .sort((a, b) => a.distance - b.distance)
+              .map((device) => (
+                <div
+                  key={device.id}
+                  className="p-4 border-b border-[#003366] cursor-pointer hover:bg-[#003366]"
+                  onClick={() => setSelectedDevice(device)}
+                >
+                  <div className="font-bold">{device.name}</div>
+                  <div className="text-sm text-gray-400">
+                    {device.brand} • {device.distance} meter • Sinyal:{" "}
+                    {device.signalStrength}%
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+
+      <style jsx global>{`
+        @keyframes pulse {
+          0% {
+            transform: scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1.5);
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default MainComponent;
